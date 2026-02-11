@@ -303,12 +303,20 @@ export default function Home() {
 
   const convertDateFormat = (dateStr: string | null) => {
     if (!dateStr) return null;
-    // Convierte dd/mm/yyyy a yyyy-mm-dd para que se guarde en BD correctamente
+    
+    // Si ya está en formato yyyy-mm-dd, devolver como está
+    if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr.trim())) {
+      return dateStr.trim();
+    }
+    
+    // Convertir dd/mm/yyyy a yyyy-mm-dd
     const parts = dateStr.trim().split('/');
-    if (parts.length === 3) {
+    if (parts.length === 3 && /^\d{2}$/.test(parts[0]) && /^\d{2}$/.test(parts[1]) && /^\d{4}$/.test(parts[2])) {
       return `${parts[2]}-${parts[1]}-${parts[0]}`;
     }
-    return dateStr; // Si ya está en otro formato, deja como está
+    
+    // Devolver como está si no coincide con ningún formato conocido
+    return dateStr;
   };
 
   const openHubSpotSearch = (email: string, firstName: string, lastName: string) => {
@@ -318,6 +326,23 @@ export default function Home() {
 
     const hubspotUrl = `https://app.hubspot.com/search/6832097/search?query=${encodeURIComponent(query)}`;
     window.open(hubspotUrl, '_blank');
+  };
+
+  // Parsear fecha en cualquier formato
+  const parseDate = (dateStr: string | null): Date | null => {
+    if (!dateStr) return null;
+    // Intentar parsear como yyyy-mm-dd primero
+    if (dateStr.includes('-')) {
+      const date = new Date(dateStr);
+      if (!isNaN(date.getTime())) return date;
+    }
+    // Intentar parsear como dd/mm/yyyy
+    const parts = dateStr.split('/');
+    if (parts.length === 3) {
+      const date = new Date(`${parts[2]}-${parts[1]}-${parts[0]}`);
+      if (!isNaN(date.getTime())) return date;
+    }
+    return null;
   };
 
   // Filtrar y ordenar contactos
@@ -332,6 +357,21 @@ export default function Home() {
     })
     .filter((contact) => contact.isReviewed === showReviewed)
     .sort((a, b) => {
+      // Casos especiales para fechas
+      if (sortField === 'registrationDate' || sortField === 'lastModifiedDate' || sortField === 'cancellationDate') {
+        const aDate = parseDate(a[sortField] as string | null);
+        const bDate = parseDate(b[sortField] as string | null);
+        
+        if (aDate && bDate) {
+          const comparison = aDate.getTime() - bDate.getTime();
+          return sortOrder === 'asc' ? comparison : -comparison;
+        }
+        if (aDate) return sortOrder === 'asc' ? 1 : -1;
+        if (bDate) return sortOrder === 'asc' ? -1 : 1;
+        return 0;
+      }
+
+      // Para otros campos, usar string comparison
       const aVal = a[sortField] || '';
       const bVal = b[sortField] || '';
 
