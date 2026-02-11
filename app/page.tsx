@@ -40,6 +40,7 @@ export default function Home() {
   const [sortField, setSortField] = useState<SortField>('firstName');
   const [sortOrder, setSortOrder] = useState<SortOrder>('asc');
   const [loading, setLoading] = useState(false);
+  const [selectedContactIds, setSelectedContactIds] = useState<Set<string>>(new Set());
   const [importMessage, setImportMessage] = useState<{
     message: string;
     type: 'success' | 'info' | 'error';
@@ -244,6 +245,62 @@ export default function Home() {
     }
   };
 
+  const toggleSelectContact = (id: string) => {
+    const newSelected = new Set(selectedContactIds);
+    if (newSelected.has(id)) {
+      newSelected.delete(id);
+    } else {
+      newSelected.add(id);
+    }
+    setSelectedContactIds(newSelected);
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedContactIds.size === filteredContacts.length) {
+      setSelectedContactIds(new Set());
+    } else {
+      setSelectedContactIds(new Set(filteredContacts.map((c) => c.id)));
+    }
+  };
+
+  const reviewSelected = async () => {
+    if (selectedContactIds.size === 0) {
+      alert('Selecciona al menos un contacto');
+      return;
+    }
+
+    try {
+      // Determinar el nuevo estado basado en la pestaña actual
+      const newReviewedState = !showReviewed;
+
+      // Actualizar UI inmediatamente
+      setContacts(
+        contacts.map((c) =>
+          selectedContactIds.has(c.id) ? { ...c, isReviewed: newReviewedState } : c
+        )
+      );
+
+      // Actualizar en la BD
+      await Promise.all(
+        Array.from(selectedContactIds).map((id) =>
+          fetch(`/api/contacts/${id}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ isReviewed: newReviewedState }),
+          })
+        )
+      );
+
+      // Limpiar selección
+      setSelectedContactIds(new Set());
+    } catch (error) {
+      console.error('Error reviewing contacts:', error);
+      alert('Error al cambiar estado de los contactos');
+      // Recargar para revertir cambios
+      fetchContacts();
+    }
+  };
+
   const convertDateFormat = (dateStr: string | null) => {
     if (!dateStr) return null;
     // Convierte dd/mm/yyyy a yyyy-mm-dd para que se guarde en BD correctamente
@@ -427,7 +484,7 @@ export default function Home() {
 
             {/* Tabs */}
             {contacts.length > 0 && (
-              <div className="mb-6 flex gap-4">
+              <div className="mb-6 flex gap-4 flex-wrap">
                 <button
                   onClick={() => setShowReviewed(false)}
                   className={`px-6 py-2 rounded-lg font-medium transition-colors ${
@@ -448,6 +505,18 @@ export default function Home() {
                 >
                   Revisados ({contacts.filter((c) => c.isReviewed).length})
                 </button>
+                {selectedContactIds.size > 0 && (
+                  <button
+                    onClick={reviewSelected}
+                    className={`px-6 py-2 rounded-lg transition-colors font-medium ml-auto ${
+                      showReviewed
+                        ? 'bg-red-600 text-white hover:bg-red-700'
+                        : 'bg-green-600 text-white hover:bg-green-700'
+                    }`}
+                  >
+                    {showReviewed ? 'Desrevisar' : 'Revisar'} {selectedContactIds.size} seleccionado{selectedContactIds.size !== 1 ? 's' : ''}
+                  </button>
+                )}
               </div>
             )}
 
@@ -482,6 +551,14 @@ export default function Home() {
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="border-b border-gray-200 bg-gray-50">
+                        <th className="px-4 py-3 text-left font-medium text-gray-700">
+                          <input
+                            type="checkbox"
+                            checked={selectedContactIds.size === filteredContacts.length && filteredContacts.length > 0}
+                            onChange={toggleSelectAll}
+                            className="rounded cursor-pointer"
+                          />
+                        </th>
                         <th className="px-4 py-3 text-left font-medium text-gray-700">
                           <button
                             onClick={() => handleSort('firstName')}
@@ -536,6 +613,14 @@ export default function Home() {
                     <tbody className="divide-y divide-gray-200">
                       {filteredContacts.map((contact) => (
                         <tr key={contact.id} className="hover:bg-gray-50 transition-colors">
+                          <td className="px-4 py-3">
+                            <input
+                              type="checkbox"
+                              checked={selectedContactIds.has(contact.id)}
+                              onChange={() => toggleSelectContact(contact.id)}
+                              className="rounded cursor-pointer"
+                            />
+                          </td>
                           <td className="px-4 py-3 text-gray-900">{contact.firstName}</td>
                           <td className="px-4 py-3 text-gray-900">{contact.lastName}</td>
                           <td className="px-4 py-3 text-gray-600 break-all">{contact.email}</td>
@@ -557,11 +642,11 @@ export default function Home() {
                               onClick={() => toggleReviewed(contact.id, contact.isReviewed)}
                               className={`block w-full px-3 py-1 rounded transition-colors ${
                                 contact.isReviewed
-                                  ? 'bg-green-600 text-white hover:bg-green-700'
+                                  ? 'bg-red-600 text-white hover:bg-red-700'
                                   : 'bg-gray-300 text-gray-700 hover:bg-gray-400'
                               }`}
                             >
-                              {contact.isReviewed ? '✓ Revisado' : 'Revisar'}
+                              {contact.isReviewed ? '✓ Desrevisar' : 'Revisar'}
                             </button>
                           </td>
                         </tr>
